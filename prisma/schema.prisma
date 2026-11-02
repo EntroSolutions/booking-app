@@ -1,3 +1,20 @@
+// Booking domain data model.
+//
+// Modeling choices (see docs/data-model.md for the full note):
+// - Roles and reservation lifecycle are modeled as PostgreSQL enums so invalid
+//   states are rejected at the database level.
+// - Weekly availability is stored as *local wall-clock minutes* (0–1440) on a
+//   weekday, plus an IANA time zone on the coach profile. This keeps recurring
+//   rules stable across DST changes; concrete instants are only materialized
+//   when a reservation is created.
+// - Reservations store concrete instants as `timestamptz` (UTC internally in
+//   PostgreSQL) so overlapping-slot checks are exact regardless of time zone.
+// - Double booking is prevented by a PostgreSQL exclusion constraint
+//   (btree_gist) on (coach_id, tstzrange(starts_at, ends_at)) restricted to
+//   active statuses — see the initial migration SQL.
+// - Booking history is preserved: reservations are never deleted, cancellation
+//   keeps the row with `CANCELLED` status, `cancelledAt` and `cancelReason`.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -5,4 +22,118 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  COACH
+  ADMIN
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(CLIENT)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  coachProfile CoachProfile?
+  reservations Reservation[] @relation("ClientReservations")
+
+  @@map("users")
+}
+
+model CoachProfile {
+  id       String @id @default(cuid())
+  userId   String @unique @map("user_id")
+  bio      String?
+  /// IANA time zone (e.g. "Europe/Berlin") used to interpret weekly availability.
+  timezone String
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weeklyAvailability    WeeklyAvailability[]
+  availabilityExceptions AvailabilityException[]
+  reservations          Reservation[]          @relation("CoachReservations")
+
+  @@map("coach_profiles")
+}
+
+/// Recurring weekly availability as wall-clock minutes from midnight,
+/// interpreted in the coach's time zone.
+model WeeklyAvailability {
+  id          String  @id @default(cuid())
+  coachId     String  @map("coach_id")
+  weekday     Weekday
+  /// Minutes from local midnight, 0 <= startMinute < endMinute <= 1440
+  /// (enforced by a CHECK constraint in the migration SQL).
+  startMinute Int     @map("start_minute")
+  endMinute   Int     @map("end_minute")
+
+  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, weekday, startMinute], map: "weekly_availability_unique_slot")
+  @@index([coachId, weekday], map: "weekly_availability_coach_weekday_idx")
+  @@map("weekly_availability")
+}
+
+/// Per-date overrides: full-day unavailability or ad-hoc time windows
+/// (extra availability or blocked intervals) for a specific local date.
+model AvailabilityException {
+  id          String  @id @default(cuid())
+  coachId     String  @map("coach_id")
+  /// Local calendar date (in the coach's time zone) the exception applies to.
+  date        DateTime @db.Date
+  isUnavailable Boolean @default(false) @map("is_unavailable")
+  /// Optional wall-clock window; null with isUnavailable=true means all day.
+  startMinute Int?    @map("start_minute")
+  endMinute   Int?    @map("end_minute")
+  reason      String?
+
+  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, date, startMinute], map: "availability_exception_unique")
+  @@index([coachId, date], map: "availability_exception_coach_date_idx")
+  @@map("availability_exceptions")
+}
+
+/// A concrete booking. Timestamps are absolute instants (timestamptz / UTC).
+/// Rows are never hard-deleted so booking history is preserved.
+model Reservation {
+  id         String            @id @default(cuid())
+  coachId    String            @map("coach_id")
+  clientId   String            @map("client_id")
+  startsAt   DateTime          @map("starts_at") @db.Timestamptz(3)
+  endsAt     DateTime          @map("ends_at") @db.Timestamptz(3)
+  status     ReservationStatus @default(PENDING)
+  cancelledAt DateTime?        @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason String?         @map("cancel_reason")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  coach  CoachProfile @relation("CoachReservations", fields: [coachId], references: [id])
+  client User         @relation("ClientReservations", fields: [clientId], references: [id])
+
+  // Overlap between a coach's active reservations is rejected by the
+  // exclusion constraint `reservation_no_overlap` (migration SQL).
+  @@index([coachId, startsAt], map: "reservation_coach_starts_idx")
+  @@index([clientId, startsAt], map: "reservation_client_starts_idx")
+  @@map("reservations")
 }
