@@ -6,3 +6,10 @@ export const exampleSchema = z.object({
 });
 
 export type Example = z.infer<typeof exampleSchema>;
+
+/** Email entered on the sign-in form. Normalized to lowercase. */
+export const signInSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+
+export type SignInInput = z.infer<typeof signInSchema>;
