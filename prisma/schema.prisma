@@ -9,109 +9,193 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { CLIENT COACH ADMIN }
-enum Weekday { MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY }
-enum ReservationStatus { PENDING CONFIRMED CANCELLED COMPLETED }
+enum Role {
+  CLIENT
+  COACH
+  ADMIN
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum EmailKind {
+  BOOKING_CONFIRMATION
+  CANCELLATION_CONFIRMATION
+}
+
+enum EmailStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
 
 model User {
-  id String @id @default(cuid())
-  email String @unique
-  name String?
-  emailVerified DateTime? @map("email_verified") @db.Timestamptz(3)
-  image String?
-  role Role @default(CLIENT)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
-  coachProfile CoachProfile?
-  reservations Reservation[] @relation("ClientReservations")
-  accounts Account[]
-  sessions Session[]
+  id             String         @id @default(cuid())
+  email          String         @unique
+  name           String?
+  emailVerified  DateTime?      @map("email_verified") @db.Timestamptz(3)
+  image          String?
+  role           Role           @default(CLIENT)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at")
+  coachProfile   CoachProfile?
+  reservations   Reservation[]  @relation("ClientReservations")
+  accounts       Account[]
+  sessions       Session[]
+
   @@map("users")
 }
+
 model Account {
-  id String @id @default(cuid())
-  userId String @map("user_id")
-  type String
-  provider String
-  providerAccountId String @map("provider_account_id")
-  refresh_token String?
-  access_token String?
-  expires_at Int?
-  token_type String?
-  scope String?
-  id_token String?
-  session_state String?
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([provider, providerAccountId], map: "accounts_provider_account_unique")
   @@index([userId], map: "accounts_user_idx")
   @@map("accounts")
 }
+
 model Session {
-  id String @id @default(cuid())
-  sessionToken String @unique @map("session_token")
-  userId String @map("user_id")
-  expires DateTime @db.Timestamptz(3)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime @db.Timestamptz(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId], map: "sessions_user_idx")
   @@map("sessions")
 }
+
 model VerificationToken {
   identifier String
-  token String @unique
-  expires DateTime @db.Timestamptz(3)
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(3)
+
   @@unique([identifier, token], map: "verification_tokens_identifier_token_unique")
   @@map("verification_tokens")
 }
+
 model CoachProfile {
-  id String @id @default(cuid())
-  userId String @unique @map("user_id")
-  bio String?
-  timezone String
-  sessionDurationMinutes Int @default(60) @map("session_duration_minutes")
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weeklyAvailability WeeklyAvailability[]
+  id                     String                 @id @default(cuid())
+  userId                 String                 @unique @map("user_id")
+  bio                    String?
+  timezone               String
+  sessionDurationMinutes Int                    @default(60) @map("session_duration_minutes")
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weeklyAvailability     WeeklyAvailability[]
   availabilityExceptions AvailabilityException[]
-  reservations Reservation[] @relation("CoachReservations")
+  reservations           Reservation[]          @relation("CoachReservations")
+
   @@map("coach_profiles")
 }
+
 model WeeklyAvailability {
-  id String @id @default(cuid())
-  coachId String @map("coach_id")
-  weekday Weekday
-  startMinute Int @map("start_minute")
-  endMinute Int @map("end_minute")
-  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  coachId     String       @map("coach_id")
+  weekday     Weekday
+  startMinute Int          @map("start_minute")
+  endMinute   Int          @map("end_minute")
+  coach       CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
   @@unique([coachId, weekday, startMinute], map: "weekly_availability_unique_slot")
   @@index([coachId, weekday], map: "weekly_availability_coach_weekday_idx")
   @@map("weekly_availability")
 }
+
 model AvailabilityException {
-  id String @id @default(cuid())
-  coachId String @map("coach_id")
-  date DateTime @db.Date
-  isUnavailable Boolean @default(false) @map("is_unavailable")
-  startMinute Int? @map("start_minute")
-  endMinute Int? @map("end_minute")
-  reason String?
-  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  coachId     String       @map("coach_id")
+  date        DateTime     @db.Date
+  isUnavailable Boolean    @default(false) @map("is_unavailable")
+  startMinute Int?         @map("start_minute")
+  endMinute   Int?         @map("end_minute")
+  reason      String?
+  coach       CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
   @@unique([coachId, date, startMinute], map: "availability_exception_unique")
   @@index([coachId, date], map: "availability_exception_coach_date_idx")
   @@map("availability_exceptions")
 }
+
 model Reservation {
-  id String @id @default(cuid())
-  coachId String @map("coach_id")
-  clientId String @map("client_id")
-  startsAt DateTime @map("starts_at") @db.Timestamptz(3)
-  endsAt DateTime @map("ends_at") @db.Timestamptz(3)
-  status ReservationStatus @default(PENDING)
-  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(3)
-  cancelReason String? @map("cancel_reason")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @default(now()) @map("updated_at")
-  coach CoachProfile @relation("CoachReservations", fields: [coachId], references: [id])
-  client User @relation("ClientReservations", fields: [clientId], references: [id])
+  id                 String             @id @default(cuid())
+  coachId            String             @map("coach_id")
+  clientId           String             @map("client_id")
+  startsAt           DateTime           @map("starts_at") @db.Timestamptz(3)
+  endsAt             DateTime           @map("ends_at") @db.Timestamptz(3)
+  status             ReservationStatus  @default(PENDING)
+  cancelledAt        DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason       String?            @map("cancel_reason")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @default(now()) @map("updated_at")
+  coach              CoachProfile       @relation("CoachReservations", fields: [coachId], references: [id])
+  client             User               @relation("ClientReservations", fields: [clientId], references: [id])
+  idempotencyRecords IdempotencyRecord[]
+  emails             EmailOutbox[]
+
   @@index([coachId, startsAt], map: "reservation_coach_starts_idx")
   @@index([clientId, startsAt], map: "reservation_client_starts_idx")
   @@map("reservations")
+}
+
+model IdempotencyRecord {
+  key           String     @id
+  reservationId String     @map("reservation_id")
+  fingerprint   String
+  expiresAt     DateTime   @map("expires_at") @db.Timestamptz(3)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt], map: "idempotency_expires_idx")
+  @@index([reservationId], map: "idempotency_reservation_idx")
+  @@map("idempotency_records")
+}
+
+// Transactional outbox: rows are committed with their reservation mutation so
+// a provider outage can never lose a confirmation email.
+model EmailOutbox {
+  id            String       @id @default(cuid())
+  reservationId String       @map("reservation_id")
+  kind          EmailKind
+  recipient     String
+  subject       String
+  text          String
+  status        EmailStatus  @default(PENDING)
+  attempts      Int          @default(0)
+  availableAt   DateTime     @default(now()) @map("available_at") @db.Timestamptz(3)
+  sentAt        DateTime?    @map("sent_at") @db.Timestamptz(3)
+  lastError     String?      @map("last_error")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
+  reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@unique([reservationId, kind], map: "email_outbox_reservation_kind_unique")
+  @@index([status, availableAt], map: "email_outbox_delivery_idx")
+  @@map("email_outbox")
 }

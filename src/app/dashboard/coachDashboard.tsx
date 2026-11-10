@@ -1,14 +1,28 @@
-import React from 'react';
-import DashboardLayout from '../../shared/DashboardLayout';
+"use client";
 
-const CoachDashboard = () => {
+import ReservationDashboard, {
+  type DashboardReservation,
+} from "@/components/reservations/reservation-dashboard";
+
+export default function CoachDashboard({
+  reservations,
+  now,
+}: {
+  reservations: DashboardReservation[];
+  now: string;
+}) {
   return (
-    <DashboardLayout>
-      <h1>Coach Dashboard</h1>
-
-      {/* TO-DO: Implement reservation sections */}
-    </DashboardLayout>
+    <section aria-labelledby="coach-reservations-heading">
+      <h2 id="coach-reservations-heading" className="text-xl font-semibold">
+        Your coaching reservations
+      </h2>
+      <div className="mt-4">
+        <ReservationDashboard
+          reservations={reservations}
+          now={now}
+          emptyLabel="No reservations in this section."
+        />
+      </div>
+    </section>
   );
-};
-
-export default CoachDashboard;
+}

@@ -1,21 +1,33 @@
-import { test, expect } from '@playwright/test';
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import ClientDashboard from "@/app/dashboard/clientDashboard";
 
-// Example test suite for Client Dashboard
-test.describe('Client Dashboard', () => {
-  test('renders client dashboard with basic layout', async ({ page }) => {
-    // Mock login as client
-    await page.goto('/dashboard/client');
-    const title = await page.textContent('h1');
-    expect(title).toBe('Client Dashboard');
-  });
-});
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
-// Example test suite for Coach Dashboard
-test.describe('Coach Dashboard', () => {
-  test('renders coach dashboard with basic layout', async ({ page }) => {
-    // Mock login as coach
-    await page.goto('/dashboard/coach');
-    const title = await page.textContent('h1');
-    expect(title).toBe('Coach Dashboard');
+describe("reservation dashboard", () => {
+  it("renders upcoming reservations and their cancellation controls", () => {
+    render(
+      <ClientDashboard
+        now="2026-01-05T08:00:00.000Z"
+        reservations={[
+          {
+            id: "reservation-1",
+            startsAt: "2026-01-05T14:00:00.000Z",
+            endsAt: "2026-01-05T15:00:00.000Z",
+            status: "CONFIRMED",
+            cancelReason: null,
+            counterpartName: "E2E Coach",
+            canCancel: true,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("E2E Coach")).toBeInTheDocument();
+    expect(screen.getByText("CONFIRMED")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancel session with E2E Coach" }),
+    ).toBeInTheDocument();
   });
 });
