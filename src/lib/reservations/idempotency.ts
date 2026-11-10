@@ -4,10 +4,7 @@
 import { createHash } from "node:crypto";
 import type { ReservationErrorCode } from "./errors";
 
-/**
- * Scope an idempotency key to an operation namespace so the same client key
- * can never collide between booking and cancellation, or across users.
- */
+/** Scope a key to an operation and user to prevent cross-operation replays. */
 export function scopedIdempotencyKey(
   namespace: "book" | "cancel",
   userId: string,
@@ -16,11 +13,7 @@ export function scopedIdempotencyKey(
   return `${namespace}:${userId}:${key.trim()}`;
 }
 
-/**
- * Deterministic fingerprint of a request payload. Used to detect an
- * idempotency key being replayed with *different* content, which must fail
- * rather than silently return an unrelated reservation.
- */
+/** Deterministic request fingerprint used to reject changed replays. */
 export function requestFingerprint(payload: Record<string, unknown>): string {
   const normalized = JSON.stringify(
     Object.keys(payload)
@@ -47,29 +40,31 @@ function postgresCode(error: unknown): string | undefined {
       return candidate;
     }
   }
-  // Prisma sometimes only exposes the text form: "Raw query failed. Code: `23P01`."
   const message = typeof shape.message === "string" ? shape.message : "";
-  const fromMessage = message.match(/Code: `([0-9A-Z]{5})`/);
-  return fromMessage?.[1];
+  return message.match(/Code: `([0-9A-Z]{5})`/)?.[1];
 }
 
-/** `23P01` — exclusion_violation: the coach already has an overlapping booking. */
+/** `23P01` — an active reservation overlaps the requested session. */
 export function isExclusionViolation(error: unknown): boolean {
   return postgresCode(error) === "23P01";
 }
 
-/** `23505` — unique_violation, e.g. a replayed idempotency key. */
+/** Prisma P2002 or Postgres 23505 unique_violation. */
 export function isUniqueViolation(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const code = (error as PostgresErrorShape).code;
+    if (code === "P2002") return true;
+  }
   return postgresCode(error) === "23505";
 }
 
-/**
- * Map a thrown persistence error to a stable domain code. Returns null when
- * the error is not a recognizable database conflict (caller rethrows).
- */
+/** Map recognized database conflicts; unknown failures are rethrown. */
 export function conflictCodeFromDatabaseError(
   error: unknown,
-): Extract<ReservationErrorCode, "SLOT_TAKEN" | "IDEMPOTENCY_KEY_REUSED"> | null {
+): Extract<
+  ReservationErrorCode,
+  "SLOT_TAKEN" | "IDEMPOTENCY_KEY_REUSED"
+> | null {
   if (isExclusionViolation(error)) return "SLOT_TAKEN";
   if (isUniqueViolation(error)) return "IDEMPOTENCY_KEY_REUSED";
   return null;

@@ -1,14 +1,20 @@
-import React from 'react';
+import Link from "next/link";
+import type { ReactNode } from "react";
 
-const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="dashboard-layout">
-      <header>
-        <nav>Navbar here</nav>
+      <header className="border-b pb-4">
+        <nav aria-label="Dashboard" className="flex gap-4">
+          <Link href="/coaches" className="underline">
+            Browse coaches
+          </Link>
+          <Link href="/dashboard" className="underline">
+            Dashboard
+          </Link>
+        </nav>
       </header>
       <main>{children}</main>
     </div>
   );
-};
-
-export default DashboardLayout;
+}
