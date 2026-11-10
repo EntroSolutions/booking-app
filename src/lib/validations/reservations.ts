@@ -37,9 +37,18 @@ export const idempotencyKeySchema = z
   .max(128, "Idempotency key must be at most 128 characters")
   .regex(/^[A-Za-z0-9._:-]+$/, "Idempotency key contains invalid characters");
 
-/** GET /api/coaches/[coachId]/slots */
+/**
+ * GET /api/coaches/[coachId]/slots
+ *
+ * `from`/`to` bound the returned window so the client can page through the
+ * horizon instead of materialising every slot for the next 30 days. Both are
+ * optional for backwards compatibility; when present they form a half-open
+ * [from, to) ISO instant range.
+ */
 export const listSlotsSchema = z.object({
   coachId: idSchema,
+  from: instantSchema.optional(),
+  to: instantSchema.optional(),
 });
 
 export type ListSlotsInput = z.infer<typeof listSlotsSchema>;
