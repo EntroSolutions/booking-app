@@ -19,6 +19,10 @@ import {
 } from "@/lib/reservations/policy";
 import { prisma } from "@/server/db";
 import { serverNow } from "@/server/clock";
+import {
+  enqueueBookingConfirmationEmails,
+  enqueueCancellationEmails,
+} from "@/server/email/enqueue";
 
 export interface ReservationDto {
   id: string;
@@ -240,7 +244,7 @@ export async function bookReservation(input: {
 
         const client = await tx.user.findUnique({
           where: { id: input.clientId },
-          select: { email: true },
+          select: { email: true, name: true },
         });
         if (!client) throw domainError("UNAUTHENTICATED");
 
@@ -266,17 +270,19 @@ export async function bookReservation(input: {
             createdAt: now,
           },
         });
-        await tx.emailOutbox.create({
-          data: {
-            reservationId: reservation.id,
-            kind: "BOOKING_CONFIRMATION",
-            recipient: client.email,
-            subject: "Your coaching session is confirmed",
-            text: `Your session with ${coach.user.name ?? "your coach"} is confirmed for ${slot.startsAt} (${Math.round((endsAtMs - startsAtMs) / 60_000)} minutes).`,
-            availableAt: now,
-            createdAt: now,
-            updatedAt: now,
+        // One committed row per participant; delivery happens later via the
+        // job endpoint so a provider outage cannot fail the booking.
+        await enqueueBookingConfirmationEmails(tx, {
+          reservationId: reservation.id,
+          startsAt: new Date(startsAtMs),
+          endsAt: new Date(endsAtMs),
+          client: { name: client.name, email: client.email },
+          coach: {
+            name: coach.user.name,
+            email: coach.user.email,
+            timeZone: coach.timezone,
           },
+          now,
         });
         return dto(reservation);
       },
@@ -348,7 +354,10 @@ export async function cancelReservation(input: {
 
       const reservation = await tx.reservation.findUnique({
         where: { id: input.reservationId },
-        include: { coach: true, client: { select: { email: true } } },
+        include: {
+          coach: { include: { user: { select: { name: true, email: true } } } },
+          client: { select: { email: true, name: true } },
+        },
       });
       if (!reservation) throw domainError("RESERVATION_NOT_FOUND");
       if (!canManage(input.user, reservation)) {
@@ -406,24 +415,20 @@ export async function cancelReservation(input: {
       const cancelled = await tx.reservation.findUniqueOrThrow({
         where: { id: reservation.id },
       });
-      await tx.emailOutbox.upsert({
-        where: {
-          reservationId_kind: {
-            reservationId: reservation.id,
-            kind: "CANCELLATION_CONFIRMATION",
-          },
+      // One committed row per participant; delivery happens later via the
+      // job endpoint so a provider outage cannot fail the cancellation.
+      await enqueueCancellationEmails(tx, {
+        reservationId: reservation.id,
+        startsAt: cancelled.startsAt,
+        endsAt: cancelled.endsAt,
+        client: { name: reservation.client.name, email: reservation.client.email },
+        coach: {
+          name: reservation.coach.user.name,
+          email: reservation.coach.user.email,
+          timeZone: reservation.coach.timezone,
         },
-        update: {},
-        create: {
-          reservationId: reservation.id,
-          kind: "CANCELLATION_CONFIRMATION",
-          recipient: reservation.client.email,
-          subject: "Your coaching session was cancelled",
-          text: `Your session scheduled for ${cancelled.startsAt.toISOString()} was cancelled.`,
-          availableAt: now,
-          createdAt: now,
-          updatedAt: now,
-        },
+        cancelReason: cancelled.cancelReason,
+        now,
       });
       if (key) {
         await tx.idempotencyRecord.create({
