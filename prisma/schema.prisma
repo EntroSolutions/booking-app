@@ -186,16 +186,23 @@ model EmailOutbox {
   recipient     String
   subject       String
   text          String
+  // Rendered HTML body kept alongside the plain text so retries never need to
+  // re-render (and the E2E harness can preview exactly what was sent).
+  html          String       @default("")
   status        EmailStatus  @default(PENDING)
   attempts      Int          @default(0)
   availableAt   DateTime     @default(now()) @map("available_at") @db.Timestamptz(3)
   sentAt        DateTime?    @map("sent_at") @db.Timestamptz(3)
+  // Resend message id, recorded only for support/auditing; never logged.
+  providerMessageId String?  @map("provider_message_id")
   lastError     String?      @map("last_error")
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
   reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
-  @@unique([reservationId, kind], map: "email_outbox_reservation_kind_unique")
+  // One message per participant: the client and the coach each receive their
+  // own copy rendered for their time zone.
+  @@unique([reservationId, kind, recipient], map: "email_outbox_reservation_kind_recipient_unique")
   @@index([status, availableAt], map: "email_outbox_delivery_idx")
   @@map("email_outbox")
 }
