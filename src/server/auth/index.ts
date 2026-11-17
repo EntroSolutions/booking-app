@@ -28,6 +28,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 60 * 60 * 24 * 14, // 14 days
     updateAge: 60 * 60 * 24, // extend at most once a day
   },
+  // Session cookies are HTTPS-only in every deployed environment. Auth.js
+  // normally infers this from AUTH_URL; deriving it from APP_URL explicitly
+  // keeps cookies secure even if the request host is ever misconfigured.
+  useSecureCookies: appUrl.startsWith("https://"),
   pages: {
     signIn: "/sign-in",
     verifyRequest: "/sign-in/check-email",

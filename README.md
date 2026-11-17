@@ -126,3 +126,36 @@ src/
 ```bash
 npx prettier --write .
 ```
+
+## Deployment (staging & production)
+
+The app deploys to **Vercel** with **Neon** managed PostgreSQL and scheduled
+email processing via **Vercel Cron**. The full runbook — environment setup,
+pooled vs direct database URLs, DNS/email-domain verification, cron
+authentication, backups, monitoring, and rollback for both application and
+schema changes — lives in [`docs/deployment.md`](docs/deployment.md).
+
+Short version:
+
+1. Create a Neon project; copy the **pooled** URL into `DATABASE_URL` and the
+   **direct** URL into `DIRECT_DATABASE_URL` (Vercel env vars).
+2. Set `AUTH_SECRET`, `AUTH_URL`, `APP_URL`, `COACH_EMAILS`,
+   `RESEND_API_KEY`, `EMAIL_FROM`, and `CRON_SECRET` in Vercel.
+3. Verify the email sending domain in Resend (DKIM/SPF records) before launch.
+4. Release migrations exactly once per deploy (never from serverless):
+   ```bash
+   ALLOW_MIGRATE=yes DATABASE_URL="$DIRECT_DATABASE_URL" npm run db:migrate:prod
+   ```
+5. Deploy (`vercel --prod` or push to `main`); `vercel.json` registers the
+   `*/10 * * * *` cron that calls the secret-protected
+   `GET /api/jobs/email-outbox`.
+6. Smoke-test the deployment:
+   ```bash
+   npm run smoke https://<deployment-url>
+   # with deeper checks:
+   SMOKE_TOKEN="$CRON_SECRET" SMOKE_COACH="<coachId>" npm run smoke https://<url>
+   ```
+
+Rollback: `vercel promote <previous-deployment-url>` for the app; see
+`docs/deployment.md §8` for schema rollbacks and backup/restore guidance.
+
