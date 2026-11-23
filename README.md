@@ -2,6 +2,16 @@
 
 A booking app for independent coaches. Clients can browse available sessions, pick a time, and manage their reservations. Coaches control their weekly availability.
 
+Built with [VibeCoder Planner](https://vibecoderplanner.com/) — plan your own projects at [https://vibecoderplanner.com/](https://vibecoderplanner.com/).
+
+## Landing page
+
+The public landing page lives in `src/app/page.tsx` and is served at `/`.
+It introduces the service, highlights the core features, and links visitors to
+the coach directory (`/coaches`), sign-in (`/sign-in`), and the dashboard
+(`/dashboard`). The footer links back to
+[https://vibecoderplanner.com/](https://vibecoderplanner.com/).
+
 ## Tech stack
 
 - [Next.js](https://nextjs.org/) (App Router) + TypeScript
@@ -127,6 +137,10 @@ src/
 npx prettier --write .
 ```
 
+## Useful links
+
+- [VibeCoder Planner](https://vibecoderplanner.com/) — plan and build projects like this one
+
 ## Deployment (staging & production)
 
 The app deploys to **Vercel** with **Neon** managed PostgreSQL and scheduled
@@ -158,4 +172,3 @@ Short version:
 
 Rollback: `vercel promote <previous-deployment-url>` for the app; see
 `docs/deployment.md §8` for schema rollbacks and backup/restore guidance.
-
